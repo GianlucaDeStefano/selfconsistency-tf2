@@ -3,7 +3,7 @@ import numpy as np
 import time
 import multiprocessing as mp
 import threading
-import Queue
+import queue as Queue
             
 class CustomRunner(object):
     """
@@ -39,13 +39,13 @@ class CustomRunner(object):
         self.inps = []
         shapes, dtypes = [], []
         for i, d in enumerate(data):
-            inp = tf.placeholder(dtype=d.dtype, shape=[None] + list(d.shape[1:]))
+            inp = tf.compat.v1.placeholder(dtype=d.dtype, shape=[None] + list(d.shape[1:]))
             self.inps.append(inp)
             # remove batching index for individual element
             shapes.append(d.shape[1:])
             dtypes.append(d.dtype)
         # The actual queue of data.
-        self.tf_queue = tf.FIFOQueue(shapes=shapes,
+        self.tf_queue = tf.queue.FIFOQueue(shapes=shapes,
                                            # override_dtypes or default
                                            dtypes=override_dtypes or dtypes,
                                            capacity=2000)

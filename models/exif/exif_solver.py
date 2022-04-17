@@ -1,10 +1,12 @@
-import os, sys, numpy as np, time
-import init_paths
-import tensorflow as tf
-import tensorflow.contrib.slim as slim
-from utils import ops, io
+import os
+import time
 import traceback
 from collections import deque
+
+import numpy as np
+import tensorflow as tf
+from Detectors.Exif.lib.utils import ops, io
+
 
 class ExifSolver(object):
     def __init__(self, checkpoint=None, use_exif_summary=True, exp_name='no_name', init_summary=True):
@@ -38,51 +40,55 @@ class ExifSolver(object):
         self.net = net
 
         # Initialize some basic things
-        self.sess = tf.Session(config=ops.config(self.net.use_gpu))
+        self.sess = tf.compat.v1.Session(config=ops.config(self.net.use_gpu))
         if self.init_summary:
-            self.train_writer = tf.summary.FileWriter(os.path.join('./tb', self.exp_name + '_train'), self.sess.graph)
-            self.test_writer  = tf.summary.FileWriter(os.path.join('./tb', self.exp_name + '_test'))
+            self.train_writer = tf.compat.v1.summary.FileWriter(os.path.join('./tb', self.exp_name + '_train'),
+                                                                self.sess.graph)
+            self.test_writer = tf.compat.v1.summary.FileWriter(os.path.join('./tb', self.exp_name + '_test'))
             self.setup_summary()
-        self.saver = tf.train.Saver(tf.global_variables(), max_to_keep=None)
+        self.saver = tf.compat.v1.train.Saver(tf.compat.v1.global_variables(), max_to_keep=None)
 
         # Try to load checkpoint
         if self.checkpoint is not None:
-            assert os.path.exists(self.checkpoint) or os.path.exists(self.checkpoint + '.index'), 'checkpoint does not exist'
+            print(self.checkpoint)
+            assert os.path.exists(self.checkpoint) or os.path.exists(
+                self.checkpoint + '.index'), 'checkpoint does not exist'
             try:
                 self.saver.restore(self.sess, self.checkpoint)
                 self.i = io.parse_checkpoint(self.checkpoint)
-                print 'Succesfully resuming from %s' % self.checkpoint
+                print('Succesfully resuming from %s' % self.checkpoint)
             except Exception:
-                print traceback.format_exc()
+                print(traceback.format_exc())
                 try:
-                    print 'Model and checkpoint did not match, attempting to restore only weights'
+                    print('Model and checkpoint did not match, attempting to restore only weights')
                     variables_to_restore = ops.get_variables(self.checkpoint, exclude_scopes=['Adam'])
-                    restorer = tf.train.Saver(variables_to_restore)
+                    restorer = tf.compat.v1.train.Saver(variables_to_restore)
                     restorer.restore(self.sess, self.checkpoint)
                 except Exception:
-                    print 'Model and checkpoint did not match, attempting to partially restore'
-                    self.sess.run(tf.global_variables_initializer())
+                    print('Model and checkpoint did not match, attempting to partially restore')
+                    self.sess.run(tf.compat.v1.global_variables_initializer())
                     # Make sure you correctly set exclude_scopes if you are finetuining models or extending it
-                    variables_to_restore = ops.get_variables(self.checkpoint, exclude_scopes=['classify']) #'resnet_v2_50/logits/', 'predict',
-                    restorer = tf.train.Saver(variables_to_restore)
+                    variables_to_restore = ops.get_variables(self.checkpoint, exclude_scopes=[
+                        'classify'])  # 'resnet_v2_50/logits/', 'predict',
+                    restorer = tf.compat.v1.train.Saver(variables_to_restore)
                     restorer.restore(self.sess, self.checkpoint)
 
-                print 'Variables intitializing from scratch'
-                for var in tf.trainable_variables():
+                print('Variables intitializing from scratch')
+                for var in tf.compat.v1.trainable_variables():
                     if var not in variables_to_restore:
-                        print var
-                print 'Succesfully restored %i variables' % len(variables_to_restore)
+                        print(var)
+                print('Succesfully restored %i variables' % len(variables_to_restore))
                 self.i = 0
         else:
-            print 'Initializing from scratch'
+            print('Initializing from scratch')
             self.i = 0
-            self.sess.run(tf.global_variables_initializer())
+            self.sess.run(tf.compat.v1.global_variables_initializer())
         self.start_i = self.i
 
         if self.net.use_tf_threading:
             self.coord = tf.train.Coordinator()
             self.net.train_runner.start_p_threads(self.sess)
-            tf.train.start_queue_runners(sess=self.sess, coord=self.coord)
+            tf.compat.v1.train.start_queue_runners(sess=self.sess, coord=self.coord)
         return
 
     def setup_summary(self):
@@ -101,8 +107,9 @@ class ExifSolver(object):
             self.summary.extend([tf.summary.scalar('cls_loss', self.net.cls_loss),
                                  tf.summary.scalar('cls_accuracy', self.net.cls_accuracy)])
         if self.use_exif_summary:
-            self.tag_holder = {tag:tf.placeholder(tf.float32) for tag in self.net.train_runner.tags}
-            self.individual_summary = {tag:tf.summary.scalar('individual/' + tag, self.tag_holder[tag]) for tag in self.net.train_runner.tags}
+            self.tag_holder = {tag: tf.compat.v1.placeholder(tf.float32) for tag in self.net.train_runner.tags}
+            self.individual_summary = {tag: tf.summary.scalar('individual/' + tag, self.tag_holder[tag]) for tag in
+                                       self.net.train_runner.tags}
         return
 
     def setup_data(self, data, data_fn=None):
@@ -127,8 +134,8 @@ class ExifSolver(object):
 
         data_dict = self.data_fn(batch_size, split=split)
 
-        args = {self.net.im_a:data_dict['im_a'],
-                self.net.im_b:data_dict['im_b']}
+        args = {self.net.im_a: data_dict['im_a'],
+                self.net.im_b: data_dict['im_b']}
 
         if 'cls_lbl' in data_dict:
             args[self.net.cls_label] = data_dict['cls_lbl']
@@ -138,7 +145,7 @@ class ExifSolver(object):
         return args
 
     def train(self):
-        print 'Started training'
+        print('Started training')
         while self.i < self.train_iterations:
             if self.test_init and self.i == self.start_i:
                 print('Testing initialization')
@@ -177,7 +184,7 @@ class ExifSolver(object):
         io.add_summary(writer, summary, self.i)
 
         io.show([['Train time', np.mean(list(self.train_timer))]],
-                 phase=phase, iter=self.i)
+                phase=phase, iter=self.i)
         return
 
     def test(self, writer):
@@ -187,18 +194,19 @@ class ExifSolver(object):
             to_print = []
             for i, (im_a_batch, im_b_batch, label_batch) in enumerate(test_queue):
                 tag = self.net.train_runner.tags[i]
-                output = self.sess.run(self.net.pred, feed_dict={self.net.im_a:im_a_batch,
-                                                                 self.net.im_b:im_b_batch,
-                                                                 self.net.label:label_batch,
-                                                                 self.net.is_training:False})
+                output = self.sess.run(self.net.pred, feed_dict={self.net.im_a: im_a_batch,
+                                                                 self.net.im_b: im_b_batch,
+                                                                 self.net.label: label_batch,
+                                                                 self.net.is_training: False})
 
-                tag_acc = 100.0 * (np.sum(np.round(output[:, i]) == label_batch[:, i])/float(self.net.batch_size))
-                summary = self.sess.run(self.individual_summary[tag], feed_dict={self.tag_holder[tag]:tag_acc})
+                tag_acc = 100.0 * (np.sum(np.round(output[:, i]) == label_batch[:, i]) / float(self.net.batch_size))
+                summary = self.sess.run(self.individual_summary[tag], feed_dict={self.tag_holder[tag]: tag_acc})
                 io.add_summary(writer, [summary], self.i)
                 to_print.append([tag, tag_acc])
             io.show(to_print, phase='test', iter=self.i)
             print('EXIF test accuracy evaluation took %.2f seconds' % (time.time() - exif_start))
         return
+
 
 def initialize(args):
     return ExifSolver(**args)

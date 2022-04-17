@@ -1,6 +1,6 @@
 import tensorflow as tf
 import numpy as np
-import tensorflow.contrib.slim as slim
+import tf_slim as slim
 
 def get_variables(finetune_ckpt_path, exclude_scopes=None):
     """Returns list of variables without scopes that start with exclude_scopes ."""
@@ -12,7 +12,7 @@ def get_variables(finetune_ckpt_path, exclude_scopes=None):
     return variables_to_restore
 
 def config(use_gpu=None):
-    config = tf.ConfigProto()
+    config = tf.compat.v1.ConfigProto()
     config.gpu_options.allow_growth = True
     config.allow_soft_placement = True
     if use_gpu:
@@ -22,7 +22,6 @@ def config(use_gpu=None):
     return config
 
 def tfprint(x):
-    print x
     return x
 
 def extract_var(starts_with, is_not=False):
@@ -31,9 +30,9 @@ def extract_var(starts_with, is_not=False):
     selected_vars = []
     for s in starts_with:
         if not is_not:
-            selected_vars.extend([var for var in tf.trainable_variables() if var.op.name.startswith(s)])
+            selected_vars.extend([var for var in tf.compat.v1.trainable_variables() if var.op.name.startswith(s)])
         else:
-            selected_vars.extend([var for var in tf.trainable_variables() if not var.op.name.startswith(s)])
+            selected_vars.extend([var for var in tf.compat.v1.trainable_variables() if not var.op.name.startswith(s)])
     return selected_vars
 
 def init_solver(param):
